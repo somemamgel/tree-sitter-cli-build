@@ -1,0 +1,58 @@
+name: Build tree-sitter CLI for glibc 2.31
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            --build-arg TREE_SITTER_VERSION=0.26.10 \
+            --tag tree-sitter-glibc231 .
+
+      - name: Extract binary
+        run: |
+          mkdir -p dist
+
+          container_id=$(docker create tree-sitter-glibc231)
+
+          docker cp \
+            "${container_id}:/usr/local/bin/tree-sitter" \
+            dist/tree-sitter
+
+          docker rm "${container_id}"
+
+          chmod +x dist/tree-sitter
+
+      - name: Verify binary
+        run: |
+          file dist/tree-sitter
+          dist/tree-sitter --version
+
+          readelf --version-info dist/tree-sitter \
+            | grep -oE 'GLIBC_[0-9.]+' \
+            | sort -Vu \
+            | tee dist/glibc-versions.txt
+
+          sha256sum dist/tree-sitter \
+            | tee dist/tree-sitter.sha256
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: tree-sitter-cli-0.26.10-linux-x86_64-glibc-2.31
+          path: |
+            dist/tree-sitter
+            dist/tree-sitter.sha256
+            dist/glibc-versions.txt
+          retention-days: 30
